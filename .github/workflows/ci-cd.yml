@@ -54,16 +54,18 @@ jobs:
         run: echo "VERSION_TAG=1.0.${{ github.run_number }}" >> $GITHUB_ENV
 
       - name: Build Docker image
-        run: |
-            docker build -t practica5 .
-            echo ${{ secrets.AWS_DEFAULT_REGION }}
-      - run: echo "AWS KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}"
-      - name: Configure AWS credentials
+        run: docker build -t practica5 .
+
+      - name: Show AWS KEY
+        run: echo "AWS KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}"
+
+      # ❗ ESTE ERA TU ERROR – NO PUEDE HABER "run" + "uses"
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
