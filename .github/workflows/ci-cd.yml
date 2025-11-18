@@ -85,6 +85,21 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+      - name: DEBUG - Verificar que los secretos existen
+        run: |
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "❌ ERROR: El secreto AWS_ACCESS_KEY_ID NO está configurado o está vacío."
+            exit 1
+          else
+            echo "ÉXITO: El secreto AWS_ACCESS_KEY_ID está cargado (oculto por seguridad)."
+          fi
+
+          if [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "❌ ERROR: El secreto AWS_SECRET_ACCESS_KEY NO está configurado o está vacío."
+            exit 1
+          else
+            echo "ÉXITO: El secreto AWS_SECRET_ACCESS_KEY está cargado (oculto por seguridad)."
+          fi
       - name: Configurar credenciales de AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
