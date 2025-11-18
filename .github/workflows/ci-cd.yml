@@ -6,19 +6,22 @@ permissions:
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - "main"
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
 
 jobs:
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
@@ -26,60 +29,87 @@ jobs:
 
       - name: Install dependencies
         run: npm install
-      
-      - name: Build
+
+      - name: Build app
         run: npm run build
 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: .
 
   docker:
     runs-on: ubuntu-latest
     needs: build
+    outputs:
+      docker_image: ${{ steps.set_image.outputs.docker_image }}
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: .
+
+      - name: Set version tag
+        run: |
+          echo "VERSION_TAG=1.0.${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: docker build -t practica5 .
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Docker image
-        run: docker build -t practica5 .
-
-      - name: Tag image
+      - name: Tag final image
+        id: set_image
         run: |
-          TAG=$(date +%s)
-          echo "TAG=$TAG" >> $GITHUB_ENV
-          docker tag practica5:latest ${{ secrets.ECR_URL }}:latest
-          docker tag practica5:latest ${{ secrets.ECR_URL }}:$TAG
+          IMAGE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_DEFAULT_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$VERSION_TAG"
+          docker tag practica5 $IMAGE
+          echo "docker_image=$IMAGE" >> $GITHUB_OUTPUT
 
-      - name: Push image
+      - name: Push image to ECR
         run: |
-          docker push ${{ secrets.ECR_URL }}:latest
-          docker push ${{ secrets.ECR_URL }}:${{ env.TAG }}
-
+          docker push ${{ steps.set_image.outputs.docker_image }}
 
   deploy:
     runs-on: ubuntu-latest
     needs: docker
+
     steps:
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            docker pull ${{ secrets.ECR_URL }}:latest
+      - name: Create SSH key
+        run: |
+          echo "${{ secrets.EC2_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Deploy to EC2
+        run: |
+          IMAGE="${{ needs.docker.outputs.docker_image }}"
+
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@${{ secrets.EC2_HOST }} << EOF
+            aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} \
+              | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_DEFAULT_REGION }}.amazonaws.com
+
+            docker pull $IMAGE
+
             docker stop practica5 || true
             docker rm practica5 || true
+
             docker run -d \
               -p 3000:3000 \
               --env-file /home/ubuntu/.env.prod \
               --name practica5 \
-              ${{ secrets.ECR_URL }}:latest
+              $IMAGE
+          EOF
