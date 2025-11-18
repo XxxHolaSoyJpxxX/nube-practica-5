@@ -1,5 +1,9 @@
 name: Deploy Practica 5
 
+permissions:
+  id-token: write
+  contents: read
+
 on:
   push:
     branches: ["main"]
