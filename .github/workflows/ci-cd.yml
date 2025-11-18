@@ -1,114 +1,138 @@
-name: Deploy Practica 5
-
-permissions:
-  id-token: write
-  contents: read
-
-env:
-  AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+name: CI/CD Pipeline (Node.js App)
 
 on:
   push:
     branches:
-      - "main"
+      - '**'
+  workflow_dispatch:
+
+# 2. VARIABLES DE ENTORNO
+env:
+  # Esta región es fija
+  AWS_REGION: us-east-1 
+  
+  # ¡YA NO USAMOS VALORES FIJOS AQUÍ!
+  # Usaremos los secretos de GitHub en los pasos de abajo.
 
 jobs:
-
-  build:
+  build-and-push-to-ecr:
+    name: Build y Push a ECR
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build app
-        run: npm run build
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app
-          path: .
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: build
+    permissions:
+      id-token: write
+      contents: read
     outputs:
-      docker_image: ${{ steps.set_image.outputs.docker_image }}
+      image_tag: ${{ steps.set_vars.outputs.version_tag }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout del código
         uses: actions/checkout@v4
 
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: app
-          path: .
+      - name: Extraer nombre de rama limpio
+        id: extract_branch
+        run: |
+          RAW_BRANCH="${{ github.ref_name }}"
+          CLEAN_BRANCH=$(echo "$RAW_BRANCH" | sed -E 's:^(feature/|hotfix/|bugfix/|release/)::' | tr '/' '-')
+          echo "branch_name=$CLEAN_BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Set version tag
-        run: echo "VERSION_TAG=1.0.${{ github.run_number }}" >> $GITHUB_ENV
+      - name: Definir variables de versión
+        id: set_vars
+        run: |
+          VERSION_TAG="1.0.${{ github.run_number }}-${{ steps.extract_branch.outputs.branch_name }}"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+          
+          # ¡ARREGLADO! Construye la URI usando los secretos
+          echo "ecr_image_uri=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$VERSION_TAG" >> "$GITHUB_OUTPUT"
+          
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build Docker image
-        run: docker build -t practica5 .
-
-      - name: Show AWS KEY
-        run: echo "AWS KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}"
-
-      - name: Configure AWS credentials
+      - name: Configurar credenciales de AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to ECR
+      - name: Iniciar sesión en ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Tag final image
-        id: set_image
+      - name: Build, tag, y push a ECR
+        env:
+          # ¡ARREGLADO! Pasa las variables de secretos al script
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         run: |
-          IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPOSITORY}:$VERSION_TAG"
-          docker tag practica5 $IMAGE
-          echo "docker_image=$IMAGE" >> $GITHUB_OUTPUT
+          IMAGE_URI_VERSIONED="${{ steps.set_vars.outputs.ecr_image_uri }}"
+          
+          echo "Construyendo y subiendo $IMAGE_URI_VERSIONED"
+          docker build -t $IMAGE_URI_VERSIONED -f dockerfile .
+          docker push $IMAGE_URI_VERSIONED
+          
+          if [ -n "${{ steps.set_vars.outputs.latest_tag }}" ]; then
+            IMAGE_URI_LATEST="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest"
+            echo "Etiquetando y subiendo $IMAGE_URI_LATEST"
+            docker tag $IMAGE_URI_VERSIONED $IMAGE_URI_LATEST
+            docker push $IMAGE_URI_LATEST
+          fi
 
-      - name: Push image to ECR
-        run: docker push ${{ steps.set_image.outputs.docker_image }}
-
-  deploy:
+  deploy-to-ec2:
+    name: Desplegar en EC2
     runs-on: ubuntu-latest
-    needs: docker
+    needs: build-and-push-to-ecr 
+    if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Create SSH key
-        run: |
-          echo "${{ secrets.EC2_KEY }}" > key.pem
-          chmod 600 key.pem
+      - name: Configurar credenciales de AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy to EC2
-        run: |
-          IMAGE="${{ needs.docker.outputs.docker_image }}"
+      - name: Iniciar sesión en ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@${{ secrets.EC2_HOST }} << EOF
-            aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
-              | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
-
-            docker pull $IMAGE
-            docker stop practica5 || true
-            docker rm practica5 || true
-
-            docker run -d \
-              -p 3000:3000 \
-              --env-file /home/ubuntu/.env.prod \
-              --name practica5 \
-              $IMAGE
-          EOF
+      - name: Desplegar en EC2
+        uses: appleboy/ssh-action@master
+        with:
+          # ¡ARREGLADO! Usa los secretos en lugar de env:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user # Asumiendo que usas 'ec2-user'
+          key: ${{ secrets.EC2_SSH_KEY }} # ¡ARREGLADO! El nombre correcto
+          
+          # ¡ARREGLADO! Pasa los secretos al script
+          script: |
+            echo "Despliegue iniciado..."
+            
+            # 1. Iniciar sesión en ECR (en la instancia EC2)
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+            
+            # 2. Definir la URI de la imagen 'latest'
+            IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest"
+            
+            # 3. Hacer pull de la nueva imagen
+            echo "Haciendo pull de $IMAGE_URI"
+            docker pull $IMAGE_URI
+            
+            # 4. Detener y eliminar el contenedor anterior
+            echo "Deteniendo contenedor 'prod-app' (si existe)..."
+            docker stop prod-app || true
+            docker rm prod-app || true
+            
+            # 5. Lanzar el nuevo contenedor
+            echo "Lanzando nuevo contenedor..."
+            docker run -d --name prod-app -p 3000:3000 \
+              --restart always \
+              -e ENVIRONMENT=prod \
+              -e PORT=3000 \
+              -e AWS_REGION=${{ env.AWS_REGION }} \
+              -e BUCKET_NAME=${{ secrets.PROD_BUCKET_NAME }} \
+              -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+              -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+              $IMAGE_URI
+            
+            echo "Despliegue completado."
