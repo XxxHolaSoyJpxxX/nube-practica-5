@@ -39,15 +39,30 @@ if (ENV !== "prod") {
 let s3: S3Client | null = null;
 
 if (ENV === "prod") {
+  // Validamos que tengamos las credenciales
+  const creds =
+    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+      ? {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+          // AÑADIMOS EL TOKEN DE SESIÓN (SI EXISTE)
+          sessionToken: process.env.AWS_SESSION_TOKEN,
+        }
+      : undefined;
+
+  // Log de error para depuración
+  if (!creds) {
+    console.error("❌ FALTAN CREDENCIALES DE AWS (KEY_ID o SECRET_KEY)");
+  } else if (creds.accessKeyId.startsWith("ASIA") && !creds.sessionToken) {
+    // Este log nos salvará si el token falta
+    console.error(
+      "❌ ERROR: Se detectaron claves temporales (ASIA) pero FALTA EL AWS_SESSION_TOKEN"
+    );
+  }
+
   s3 = new S3Client({
     region: process.env.AWS_REGION,
-    credentials:
-      process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-        ? {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-          }
-        : undefined,
+    credentials: creds,
   });
 
   /* --------------------------- LISTAR ARCHIVOS --------------------------- */
