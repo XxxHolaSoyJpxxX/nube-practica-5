@@ -139,7 +139,7 @@ jobs:
             docker stop prod-app || true
             docker rm prod-app || true
             
-            # 5. Lanzar el nuevo contenedor
+            # 5. Lanzar el nuevo contenedor (¡CON EL SECRETO CORREGIDO!)
             echo "Lanzando nuevo contenedor..."
             docker run -d --name prod-app -p 3000:3000 \
               --restart always \
@@ -149,6 +149,7 @@ jobs:
               -e BUCKET_NAME=${{ secrets.PROD_BUCKET_NAME }} \
               -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
               -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+              -e AWS_SESSION_TOKEN=${{ secrets.AWS_SESSION_TOKEN }} \
               $IMAGE_URI
             
             echo "Despliegue completado."
