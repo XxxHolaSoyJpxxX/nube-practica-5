@@ -4,6 +4,11 @@ import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 import archivosRoutes from "./routes/archivosRoutes";
+import { fileURLToPath } from "url";
+
+// Config ESM: __dirname y __filename
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -15,8 +20,7 @@ app.use(express.json());
 
 console.log(`🚀 Iniciando aplicación en ambiente: ${ENV}`);
 
-/* ----------------------------- CONFIG LOCAL ----------------------------- */
-
+/* ----------------------------- CONFIGURACIÓN LOCAL (MULTER) ----------------------------- */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, "uploads");
@@ -28,11 +32,11 @@ const storage = multer.diskStorage({
 
 const localUpload = multer({ storage });
 
-/* ----------------------------- CRUD LOCAL SOLO EN LOCAL ----------------------------- */
-
+/* ----------------------------- CRUD LOCAL ----------------------------- */
 if (ENV === "local") {
   console.log("📁 Modo LOCAL: habilitando rutas /local/archivos");
 
+  // Listar archivos
   app.get("/local/archivos", (req, res) => {
     const dir = path.join(__dirname, "uploads");
     if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -40,6 +44,7 @@ if (ENV === "local") {
     res.json({ archivos: files });
   });
 
+  // Subir archivo
   app.post("/local/archivos", localUpload.single("archivo"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Archivo faltante" });
     res.status(201).json({
@@ -48,6 +53,7 @@ if (ENV === "local") {
     });
   });
 
+  // Descargar archivo
   app.get("/local/archivos/:nombre", (req, res) => {
     const { nombre } = req.params;
     const filePath = path.join(__dirname, "uploads", nombre);
@@ -57,15 +63,14 @@ if (ENV === "local") {
   });
 }
 
-/* ----------------------------- CRUD S3 SOLO EN PROD ----------------------------- */
-
+/* ----------------------------- CRUD S3 (PRODUCCIÓN) ----------------------------- */
 if (ENV === "prod") {
   console.log("🟦 Modo PRODUCCIÓN: habilitando rutas /archivos (S3)");
   app.use("/archivos", archivosRoutes);
 }
 
-/* ----------------------------- SERVIDOR ----------------------------- */
-
+/* ----------------------------- INICIAR SERVIDOR ----------------------------- */
+const host = ENV === "local" ? "localhost" : "0.0.0.0";
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor corriendo en http://0.0.0.0:${PORT}`);
 });
