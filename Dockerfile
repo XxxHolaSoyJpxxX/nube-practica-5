@@ -1,24 +1,24 @@
-# Actividad 1 y 4: Dockerfile
 FROM node:18-alpine
 
-# Crear directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos de dependencias
+# Copiar dependencias
 COPY package*.json ./
+# Copiar configuración de TS
+COPY tsconfig.json ./
 
-# Instalar dependencias
 RUN npm install
 
-# Copiar el código fuente
+# Copiar todo el código fuente
 COPY . .
 
-# Compilar TypeScript (Asumiendo que tienes un script "build" en package.json)
-# Si no usas TS compilado, puedes omitir este paso y usar ts-node o node directo si es JS
+# Compilar
 RUN npm run build
 
-# Exponer el puerto
 EXPOSE 3000
 
-# Definir comando de inicio
+# DIAGNÓSTICO: Listar archivos para ver si se generó server.js o Server.js
+RUN echo "--- CONTENIDO DE DIST ---" && ls -R dist && echo "-----------------------"
+
+# Iniciar servidor
 CMD ["node", "dist/server.js"]

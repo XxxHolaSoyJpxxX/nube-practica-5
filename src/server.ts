@@ -2,20 +2,18 @@ import express from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+// CORRECCIÓN: Si Archivos.ts está en la raíz, la ruta es ./Archivos
+// Si mueves Archivos.ts a la carpeta routes, entonces usa ./routes/Archivos
+import files from "./Archivos"; 
+import productos from "./routes/Productos"; // Nueva ruta de DynamoDB
 import dotenv from "dotenv";
-
-import archivosRoutes from "./routes/Archivos";
-import productosRoutes from "./routes/Productos"; 
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// Usa el puerto del entorno o 3000 por defecto
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// Middleware para parsear JSON
-app.use(express.json());
-
-// --- Configuración Multer Local (De tu archivo original) ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, "uploads");
@@ -26,9 +24,9 @@ const storage = multer.diskStorage({
     cb(null, file.originalname);
   },
 });
+
 const localUpload = multer({ storage });
 
-// --- Rutas Locales ---
 app.get("/local/archivos", (req, res) => {
   const dir = path.join(__dirname, "uploads");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -48,21 +46,12 @@ app.get("/local/archivos/:nombre", (req, res) => {
   res.download(filePath);
 });
 
-// --- Integración de Rutas AWS ---
+app.use(express.json());
 
-// 1. Rutas de S3 (Tu archivo Archivos.ts)
-// Asegúrate de que exportas 'router' como default en Archivos.ts
-app.use("/object-storage", archivosRoutes);
+// Rutas
+app.use("/object-storage", files);
+app.use("/api/productos", productos);
 
-// 2. Rutas de DynamoDB (Actividad 2 - CRUD)
-app.use("/api/productos", productosRoutes);
-
-// Health Check (Útil para AWS Load Balancers o Docker)
-app.get("/", (req, res) => {
-  res.send(`API Funcionando en ambiente: ${process.env.NODE_ENV || 'local'}`);
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
-  console.log(`Ambiente: ${process.env.NODE_ENV || 'local'}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor corriendo en http://0.0.0.0:${PORT}`);
 });
