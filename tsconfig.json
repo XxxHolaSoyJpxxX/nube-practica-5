@@ -10,12 +10,10 @@
     "skipLibCheck": true
   },
   "include": [
-    "src/**/*",
-    "server.ts",
-    "Archivos.ts",
-    "routes/**/*"
+    "**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "dist"
   ]
 }
