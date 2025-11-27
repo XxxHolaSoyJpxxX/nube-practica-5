@@ -1,0 +1,97 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  # Actividad 3: Etapa de Build (Pruebas y compilación)
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Build project
+      run: npm run build
+      
+    # Aquí podrías agregar 'npm test' si tuvieras tests
+
+  # Actividad 4: Etapa de Docker (Construcción y Push a ECR)
+  docker-push:
+    needs: build
+    runs-on: ubuntu-latest
+    # Solo ejecuta si el build fue exitoso
+    if: success()
+    
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} # Requerido si usas AWS Academy
+        aws-region: us-east-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: practica-cicd # Crea este repo en AWS ECR antes
+        IMAGE_TAG: ${{ github.sha }} # Usamos el SHA del commit como versión
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  # Actividad 5: Etapa de Despliegue (Deploy a EC2)
+  deploy:
+    needs: docker-push
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}       # IP Pública de tu EC2
+        username: ${{ secrets.EC2_USER }}   # usualmente 'ubuntu' o 'ec2-user'
+        key: ${{ secrets.EC2_SSH_KEY }}     # Tu clave .pem privada completa
+        script: |
+          # Login en ECR dentro de la EC2
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region us-east-1
+          aws configure set aws_session_token ${{ secrets.AWS_SESSION_TOKEN }}
+          
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY_URI }}
+          
+          # Parar contenedor anterior si existe
+          docker stop app-backend || true
+          docker rm app-backend || true
+          
+          # Jalar la nueva imagen
+          docker pull ${{ secrets.ECR_REGISTRY_URI }}/practica-cicd:latest
+          
+          # Correr el nuevo contenedor inyectando variables de entorno
+          docker run -d --name app-backend -p 3000:3000 \
+            -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+            -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            -e AWS_SESSION_TOKEN=${{ secrets.AWS_SESSION_TOKEN }} \
+            -e AWS_REGION=us-east-1 \
+            -e BUCKET_NAME=practica-2-745730 \
+            -e NODE_ENV=prod \
+            ${{ secrets.ECR_REGISTRY_URI }}/practica-cicd:latest

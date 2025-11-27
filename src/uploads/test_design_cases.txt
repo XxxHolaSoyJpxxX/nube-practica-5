@@ -1,0 +1,156 @@
+Equivalence Partitioning
+
+1. Function that validates credit card numbers.
+   - Valid card numbers: Length between 13 and 16 digits, containing only numeric digits.
+Cases:
+- 0123456789101112   Valid
+- 1234567890123      Valid
+- a1b2c3d4e4f6g7h8   Invalid
+- 0987654321         Invalid
+- 12345678900987654321 Invalid
+- a123456789012b     Invalid
+- 9999999999999      Valid
+- 0000000000000000   Valid
+
+
+2. Function that validates dates.
+   - Valid years: Between 1900 and 2100.
+   - Valid months: Between 1 and 12.
+   - Valid days: Between 1 and 31.
+Cases:
+- 1/1/1900     Valid
+- 31/12/2100   Valid
+- 2/28/2004    Invalid
+- 36/1/2000    Invalid
+- 1/13/180     Invalid
+- 15/6/2000    Valid
+- 0/12/2000    Invalid
+- 29/2/2000    Valid
+
+
+3. Function that checks the eligibility of a passenger to book a flight.
+   - Eligible ages: Between 18 and 65.
+   - Frequent flyers: True or False.
+Cases:
+- 28/True   Valid
+- 8/False   Invalid
+- 90/True   Invalid
+- 55/False  Valid
+- 18/True   Valid
+- 65/False  Valid
+- 17/True   Invalid
+- 66/False  Invalid
+
+
+4. Function that validates URLs.
+   - Valid URLs: Length less than or equal to 255, starting with "http://" or "https://".
+Cases:
+- http://length_255.com    Valid
+- https://length_255.com   Valid
+- https://length_115.com   Valid
+- http://length_5.com      Valid
+- http://length_555.com    Invalid
+- https://length_495.com   Invalid
+- https://length_0.com     Invalid
+- ftp://example.com        Invalid
+
+
+Boundary Value Analysis
+
+1. Function that calculates the eligibility of a person for a loan based on their income and credit score.
+Rules:
+- If the income is less than $30,000, the person is not eligible for a loan.
+- If the income is between $30,000 and $60,000 (inclusive) and the credit score is above 700, the person is eligible for a standard loan.
+- If the income is between $30,000 and $60,000 (inclusive) and the credit score is below or equal to 700, the person is eligible for a secured loan.
+- If the income is greater than $60,000 and the credit score is above 750, the person is eligible for a premium loan.
+- If the income is greater than $60,000 and the credit score is between 700 and 750 (inclusive), the person is eligible for a standard loan.
+Cases:
+- income=29999, score=800 -> Not eligible
+- income=30000, score=701 -> Standard Loan
+- income=30000, score=700 -> Secured Loan
+- income=60000, score=750 -> Standard Loan
+- income=60000, score=699 -> Secured Loan
+- income=60001, score=751 -> Premium Loan
+- income=60001, score=700 -> Standard Loan
+- income=100000, score=650 -> Standard Loan
+
+
+2. Function that determines the category of a product in an e-commerce system based on its price.
+Rules:
+- Category A: Products priced between $10 and $50 (inclusive).
+- Category B: Products priced between $51 and $100 (inclusive).
+- Category C: Products priced between $101 and $200 (inclusive).
+- Category D: Products priced above $200.
+Cases:
+- price=9 -> No category
+- price=10 -> A
+- price=50 -> A
+- price=51 -> B
+- price=100 -> B
+- price=101 -> C
+- price=200 -> C
+- price=201 -> D
+
+
+3. Function that calculates the cost of shipping for packages based on their weight and dimensions.
+Rules:
+- If the weight of the package is less than or equal to 1 kg and the dimensions (length, width, and height) are each less than or equal to 10 cm, the cost is $5.
+- If the weight is between 1 and 5 kg (inclusive) and the dimensions are each between 11 and 30 cm (inclusive), the cost is $10.
+- If the weight is greater than 5 kg or any of the dimensions is greater than 30 cm, the cost is $20.
+Cases:
+- 1kg, 10x10x10 -> $5
+- 1.1kg, 15x15x15 -> $10
+- 5kg, 30x30x30 -> $10
+- 5.1kg, 30x30x30 -> $20
+- 4kg, 35x20x20 -> $20
+- 0.5kg, 9x9x9 -> $5
+
+
+Decision Table
+
+1. Weather system advisories
+Rules:
+- Weather recommendation "High temperature and humidity. Stay hydrated." for temperature > 30 and humidity > 70.
+- Weather recommendation "Low temperature. Don't forget your jacket!" for temperature < 0 and any humidity.
+- No weather recommendation for any other temperature and humidity combination.
+
+Table:
+Temp >30 and Humidity >70 -> Stay hydrated
+Temp <0 and any humidity -> Wear jacket
+Any other combination -> No advisory
+
+
+2. User authentication system
+Rules:
+- Returns "Admin" for username "admin" and password "admin123".
+- Returns "User" for any other username with at least 5 characters and password with at least 8 characters.
+- Returns "Invalid" if the username or password lengths are not met.
+
+Table:
+Username=admin, Password=admin123 -> Admin
+Username length >=5, Password length >=8 -> User
+Username length <5 -> Invalid
+Password length <8 -> Invalid
+
+
+State Transition
+
+1. Vending Machine State Transition Diagram
+Estados:
+- Ready
+- Dispensing
+Transiciones:
+- Ready -> Inserta moneda -> Dispensing
+- Dispensing -> Selecciona bebida -> Ready
+
+
+2. Elevator State Transition Diagram
+Estados:
+- Idle
+- Moving Up
+- Moving Down
+Transiciones:
+- Idle -> Botón subir -> Moving Up
+- Idle -> Botón bajar -> Moving Down
+- Moving Up -> Stop -> Idle
+- Moving Down -> Stop -> Idle
