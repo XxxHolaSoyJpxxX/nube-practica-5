@@ -2,23 +2,23 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copiar dependencias
 COPY package*.json ./
-# Copiar configuración de TS
 COPY tsconfig.json ./
 
 RUN npm install
 
-# Copiar todo el código fuente
 COPY . .
 
 # Compilar
 RUN npm run build
 
+# EXPOSICION DE PUERTO
 EXPOSE 3000
 
-# DIAGNÓSTICO: Listar archivos para ver si se generó server.js o Server.js
-RUN echo "--- CONTENIDO DE DIST ---" && ls -R dist && echo "-----------------------"
+# DIAGNÓSTICO FINAL: Mostrar qué se generó realmente
+RUN echo "--- ESTRUCTURA DE DIST ---" && find dist -name "*.js" && echo "--------------------------"
 
-# Iniciar servidor
-CMD ["node", "dist/server.js"]
+# COMANDO INTELIGENTE:
+# Usamos 'sh' para buscar dónde demonios quedó el server.js y ejecutarlo.
+# Si está en dist/server.js o dist/src/server.js, esto lo encontrará.
+CMD ["sh", "-c", "SCRIPT=$(find dist -name 'server.js' | head -n 1); if [ -z \"$SCRIPT\" ]; then SCRIPT=$(find dist -name 'Server.js' | head -n 1); fi; echo \"Ejecutando: $SCRIPT\"; node $SCRIPT"]
